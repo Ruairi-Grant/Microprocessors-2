@@ -25,5 +25,6 @@
     "files.associations": {
         "*.S": "arm",
         "*.h": "c"
-    }
+    },
+    "cmake.configureOnOpen": true
 }
