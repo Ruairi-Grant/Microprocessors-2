@@ -1,4 +1,4 @@
-/**
+/** test_edit
  * @brief LAB #01 - TEMPLATE
  *        Main entry point for the code.
  * 
