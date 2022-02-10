@@ -55,7 +55,6 @@ int main() {
     double double_num = wallis_double_precision(iterations);
 
     // Print the value for each approximation and their error from the pi constant to the console
-    printf("pi is: %.11f\n", pi);
     printf("Single Precision approximation is:\n" );
     printf("%f\n", single_num);
     printf("Single precision approximation error is: %f\n", (single_num - pi)/pi);
