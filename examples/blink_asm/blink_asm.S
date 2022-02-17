@@ -10,6 +10,11 @@
 .equ    LED_VALUE_ON, 1         @ Specify the value that turns the LED "on"
 .equ    LED_VALUE_OFF, 0        @ Specify the value that turns the LED "off"
 
+.equ    BUTTON_GPIO_PIN, 21     @ Specify the physical GPIO pin that the Button is connected to
+.equ    BUTTON_GPIO_IN, 0       @ Specify the direction that we want to set the GPIO pin to
+.equ    BUTTON_VALUE_ON, 1      @ Specify the value where the Button is "on"
+.equ    BUTTON_VALUE_OFF, 0     @ Specify the value where the Button is "off"
+
 
 @ Entry point to the ASM portion of the program
 main_asm:
@@ -18,10 +23,20 @@ main_asm:
     movs    r0, #LED_GPIO_PIN           @ This value is the GPIO LED pin on the PI PICO board
     movs    r1, #LED_GPIO_OUT           @ We want this GPIO pin to be setup as an output pin
     bl      asm_gpio_set_dir            @ Call the subroutine to set the GPIO pin specified by r0 to state specified by r1
+
+    movs    r0, #BUTTON_GPIO_PIN        @ This value is the GPIO pin on the PI Pico board that the button is connected to 
+    bl      asm_gpio_init               @ Call the subroutine to initialise the GPIO pin specified by r0
+    movs    r0, #BUTTON_GPIO_PIN        @ This value is the GPIO pin on the PI Pico board that the button is connected to 
+    movs    r1, #BUTTON_GPIO_IN         @ We want this GPIO pin to be setup as an input pin
+    bl      asm_gpio_set_dir            @ Call the subroutine to set the GPIO pin specified by r0 to state specified by r1
+
+
+@ Loop to continuously poll the button, and toggle LED value if button is pressed
 loop:
-    ldr     r0, =SLEEP_TIME             @ Set the value of SLEEP_TIME we want to wait for
-    bl      sleep_ms                    @ Sleep until SLEEP_TIME has elapsed then toggle the LED GPIO pin
-    bl      sub_toggle                  @ Call the subroutine to toggle the current LED GPIO pin value
+    movs    r0, #BUTTON_GPIO_PIN        @ This value is the GPIO pin on the PI Pico board that the button is connected to 
+    bl      asm_gpio_get                @ Get current value of the button, stored in r0
+    cmp     r0, #0                      @ Compare value of the button in r0 and 0
+    beq     sub_toggle                  @ Call the subroutine to toggle the current LED GPIO pin value if 
     b       loop                        @ Repeat the loop
 
 @ Subroutine to toggle the LED GPIO pin value
@@ -39,6 +54,8 @@ led_set_on:
 led_set_state:
     movs    r0, #LED_GPIO_PIN           @ Set the LED GPIO pin number to r0 for use by asm_gpio_put
     bl      asm_gpio_put                @ Update the the value of the LED GPIO pin (based on value in r1)
+    ldr     r0, =SLEEP_TIME             @ Set the value of SLEEP_TIME we want to wait for
+    bl      sleep_ms                    @ Sleep until SLEEP_TIME has elaplsed before polling again
     pop     {pc}                        @ Pop the link register from the stack to the program counter
 
 
