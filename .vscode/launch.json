@@ -15,7 +15,7 @@
                 "interface/picoprobe.cfg",
                 "target/rp2040.cfg"
             ],
-            "searchDir": ["D:\\Pico\\tools\\openocd-picoprobe"],
+            "searchDir": ["C:\\Users\\ruair\\OneDrive\\Documents\\Engeneering semester 3.2\\pico-apps\\tools\\scripts"],
             "svdFile": "${env:PICO_SDK_PATH}/src/rp2040/hardware_regs/rp2040.svd",
             "runToMain": true,
             // Work around for stopping at main on restart

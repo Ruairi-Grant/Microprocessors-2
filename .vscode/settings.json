@@ -19,12 +19,21 @@
             "visibility": "default"
         }
     },
+    "cmake.configureEnvironment": {
+        "PICO_SDK_PATH": "C:\\Users\\ruair\\OneDrive\\Documents\\Engeneering semester 3.2\\pico-sdk"
+    },
+    "cmake.generator": "NMake Makefiles",
     "cmake.buildBeforeRun": true,
+    "cmake.configureOnOpen": true,
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "cortex-debug.openocdPath": "C:\\Users\\ruair\\OneDrive\\Documents\\Engeneering semester 3.2\\pico-apps\\tools\\openocd.exe",
+    "cortex-debug.enableTelemetry": false,
     "cortex-debug.registerUseNaturalFormat": false,
+    "doxygen_runner.doxygen_command": "c:\\Program Files\\doxygen\\bin\\doxygen.exe",
+    "doxygen_runner.configuration_file_override": "${workspaceRoot}\\Doxyfile",
     "files.associations": {
         "*.S": "arm",
         "*.h": "c"
-    },
-    "cmake.configureOnOpen": true
+    }
+    
 }
