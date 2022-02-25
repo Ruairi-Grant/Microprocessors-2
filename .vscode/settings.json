@@ -26,7 +26,7 @@
     "cmake.buildBeforeRun": true,
     "cmake.configureOnOpen": true,
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-    "cortex-debug.openocdPath": "C:\\Users\\ruair\\OneDrive\\Documents\\Engeneering semester 3.2\\pico-apps\\tools\\openocd.exe",
+    "cortex-debug.openocdPath": "C:\\Users\\ruair\\OneDrive\\Documents\\Engeneering semester 3.2\\pico-apps\\tools\\openocd\\openocd.exe",
     "cortex-debug.enableTelemetry": false,
     "cortex-debug.registerUseNaturalFormat": false,
     "doxygen_runner.doxygen_command": "c:\\Program Files\\doxygen\\bin\\doxygen.exe",
