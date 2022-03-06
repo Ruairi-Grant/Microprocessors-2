@@ -15,6 +15,7 @@
 .equ    SVC_ISR_OFFSET, 0x2C    @ The SVC is entry 11 in the vector table
 .equ    SVC_MAX_INSTRS, 0x01    @ Maximum allowed SVC subroutines
 
+
 @ Entry point to the ASM portion of the program
 main_asm:
     bl      init_gpio_led       @ Initialise the GPIO LED pin
@@ -30,16 +31,22 @@ loop:
 
 @ Subroutine used to introduce a short delay in the application
 do_sleep:
+    push    {lr}                 @ Store the link register to the stack as we will call nested subroutines
     ldr     r0, =SLEEP_TIME     @ Set the value of SLEEP_TIME we want to wait for
     bl      sleep_ms            @sleep for duration SLEEP_TIME
+    pop     {pc}                @ Pop the link register from the stack to the program counter
 
 @ Subroutine used to initialise the PI Pico built-in LED
 init_gpio_led:
+
+    push    {lr}                        @ Store the link register to the stack as we will call nested subroutines
     movs    r0, #LED_GPIO_PIN           @ This value is the GPIO LED pin on the PI PICO board
     bl      asm_gpio_init               @ Call the subroutine to initialise the GPIO pin specified by r0
     movs    r0, #LED_GPIO_PIN           @ This value is the GPIO LED pin on the PI PICO board
     movs    r1, #LED_GPIO_OUT           @ We want this GPIO pin to be setup as an output pin
     bl      asm_gpio_set_dir            @ Call the subroutine to set the GPIO pin specified by r0 to state specified by r1
+    pop     {pc}                        @ Pop the link register from the stack to the program counter
+
 
 @ Subroutine used to install the SVC interrupt service handler
 install_svc_isr:
@@ -71,17 +78,20 @@ svc_done:
 
 @ First function of SVC subroutine - turn on the LED
 svc_num0:
+    @push    {lr}                        @ Store the link register to the stack as we will call nested subroutines
     movs    r1, #LED_VALUE_ON           @ Store the value 1 in r1 to turn LED on
     movs    r0, #LED_GPIO_PIN           @ Set the LED GPIO pin number to r0 for use by asm_gpio_put
     bl      asm_gpio_put                @ Update the the value of the LED GPIO pin (based on value in r1)
     b       svc_done                    @ Branch back to the main ISR when done
+    pop     {pc}                        @ Pop the link register from the stack to the program counter
 
 @ Second function of SVC subroutine - turn off the LED
 svc_num1:
     movs    r1, #LED_VALUE_OFF           @ Store the value 1 in r1 to turn LED on
     movs    r0, #LED_GPIO_PIN           @ Set the LED GPIO pin number to r0 for use by asm_gpio_put
     bl      asm_gpio_put                @ Update the the value of the LED GPIO pin (based on value in r1)
-    b       svc_done            @ Branch back to the main ISR when done
+    b       svc_done                    @ Branch back to the main ISR when done
+
 
 @ SVC function entry jump table.
 .align 2
@@ -89,6 +99,9 @@ svc_jmptbl:
     .word svc_num0              @ Entry zero goes to SVC function #0.
     .word svc_num1              @ Entry one goes to SVC function #1.
     .word 0                     @ Null termination of the jump table.
+
+
+
 
 @ Set data alignment
 .data
