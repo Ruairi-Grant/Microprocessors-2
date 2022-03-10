@@ -37,8 +37,12 @@ main_asm:
         bl      init_all_btns           @ Initialize each GPIO Button
         bl      install_alrm_isr        @
 main_loop:
-        b       main_loop
-
+        bl      set_alarm               @ Set a new alarm
+        wfi                             @ Wait untill an interupt fires
+        b       main_loop               @ loop back to the start         
+//
+// Initilizing and setup subroutines
+//
 @ Initialise the PI Pico built-in LED
 init_led:
         push    {lr}                    @ Store the link register to the stack as we will call nested subroutines
@@ -74,20 +78,75 @@ init_btn:
 
 @ Set up the alrm_isr in the RAM vector table and enables the correct interrupt
 install_alrm_isr:
-        ldr     r2, =(PPB_BASE + M0PLUS_VTOR_OFFSET)    @ Store address of vector table in r2
-        ldr     r1, [r2]                                @ Load address pointed to by the vecor table into r1
-        movs    r2, #ALRM_ISR_OFFSET                    @ Store the alarm isr offset in r2
-        add     r2, r1                                  @ Add the vector table address and the alarm offset
-        ldr     r0, =alrm_isr                           @ Load address of alrm_isr into r0
-        str     r0, [r2]                                @ Store the address of alrm_isr handler to correct offset in vector table
+        @ Set alrm_isr handler to the correct address
+        ldr     r2, =(PPB_BASE + vtor_offset)   @ Store address of vector table in r2
+        ldr     r1, [r2]                        @ Load address pointed to by the vecor table into r1
+        movs    r2, #ALRM_ISR_OFFSET            @ Store the alarm isr offset in r2
+        add     r2, r1                          @ Add the vector table address and the alarm offset
+        ldr     r0, =alrm_isr                   @ Load address of alrm_isr handler into r0
+        str     r0, [r2]                        @ Store the address of alrm_isr handler to correct offset in vector table
 
-.thumb_func            
+        @ Disable then enable the ALARM IRQ
+        movs    r0, #1                          @ Move 1 into r1 so that we can set values high
+        ldr     r1, =(PPB_BASE + ipcr_offset)   @ Load address of the nvic_ipcr to r1
+        str     r0, [r1]                        @ Store 1 in nvic_icpr to disable the alarm irq
+        ldr     r1, =(PPB_BASE + iser_offset)   @ load address of the nvic_iser to r1
+        str     r0, [r1]                        @ Store 1 in the nvic_iser to enable the alarm irq
+
+//
+// General Subroutines
+//
+@ Subroutine to toggle the LED GPIO pin value
+sub_toggle:
+    push    {lr}                        @ Store the link register to the stack as we will call nested subroutines
+    mov     r0, #LED_GPIO_PIN           @ Set the LED GPIO pin number to r0 for use by asm_gpio_get
+    bl      asm_gpio_get                @ Get current the value of the LED GPIO pin (returns to r0)
+    cmp     r0, #LED_VALUE_OFF          @ Check if the LED GPIO pin value is "off"
+    beq     led_set_on                  @ If it is "off" then then jump code to to turn it on
+led_set_off:
+    mov     r1, #LED_VALUE_OFF          @ The LED is currently "on" so we want to turn it "off"
+    b       led_set_state               @ Jump to portion of code where we set the state of the LED
+led_set_on:
+    mov     r1, #LED_VALUE_ON           @ The LED is currently "off" so we want to turn it "on"
+led_set_state:
+    mov     r0, #LED_GPIO_PIN           @ Set the LED GPIO pin number to r0 for use by asm_gpio_put
+    bl      asm_gpio_put                @ Update the the value of the LED GPIO pin (based on value in r1)
+    pop     {pc}                        @ Pop the link register from the stack to the program counter
+
+@ Subroutine to set the alarm
+set_alarm:
+        @ Enable timer interupts
+        ldr     r2, =TIMER_BASE                 @ load the location pointed to by TIMER_BASE into r2
+        movs    r1, #1                          @ Move 1 into r1 to set timer_inte high
+        str     r1, [r2, #TIMER_INTE_OFFSET]    @ Enable alarm timer interupts
+        @ get current time count and add time delay to this
+        ldr     r1, [r2, #TIMER_TIMELR_OFFSET]  @ Load current timer count into r1
+        ldr     r0, =ltimer                     @ Add default alarm time to curretn timer count
+        add     r1, r0
+        str     r1, [r2, #TIMER_ALARM0_OFFSET]  @ Store this value at alarm 0 
+        bx      lr                              @ return to main loop
+
+//
+// Interupt handeler subroutines
+//
+.thumb_func  
+@alarm interupt handler          
 alrm_isr:
-        push    {lr}                    @ Push lr to stack to call other subroutines
-        ldr     r2, timerbase           @ Load the locaition pointed to by TIMER_BASE into r0
+        @ Disable the pending interrupt from TIMER
+        push    {lr}                            @ Push lr to stack to call other subroutines
+        ldr     r2, =TIMER_BASE                 @ Load the locaition pointed to by TIMER_BASE into r0
+        movs    r1, #1                          @ Move 1 into r1 so that NVIC_ICPR can be set high
+        str     r1, [r2, #TIMER_INTR_OFFSET]    @ Set NVIC_ICPR high to disable the alarm irq
+        @ Toggle the state of the LED then set the alarm
+        bl      sub_toggle                      @ Toggle the state of the LED
+        pop     {pc}                            @ Return from the interrupt
 
+
+  
                 .align 4
-timerbase:      .word TIMER_BASE        
+vtor_offset:    .word M0PLUS_VTOR_OFFSET
+ipcr_offset:    .word M0PLUS_NVIC_ICPR_OFFSET
+iser_offset:    .word M0PLUS_NVIC_ISER_OFFSET
 
 .data
 lstate: .word   DFLT_STATE_STRT
