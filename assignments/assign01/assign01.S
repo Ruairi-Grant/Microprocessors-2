@@ -32,13 +32,15 @@
 .equ    ALRM_ISR_OFFSET, 0x40         @ ALARM0 is int #0 (vector table entry 16)
 
 @ Entry point to the ASM portion of the program
-.thumb_func		@ Needed since SDK uses BX to call us
 main_asm:
         bl      init_led                @ Initialise the GPIO LED pin
         bl      init_all_btns           @ Initialize each GPIO Button
 	bl      install_alrm_isr        @ intall and setup the alarm isr
+        bl      install_gpio_isr        @ install and setup the gpio isr
 main_loop:
         bl      set_alarm               @ Set a new alarm
+        movs    r0, #GPIO_BTN_DN
+        bl      asm_gpio_get
         wfi                             @ Wait untill an interupt fires
         b       main_loop               @ loop back to the start   
 @ Initialise the PI Pico built-in LED
@@ -70,13 +72,11 @@ init_btn:
         movs    r1, #GPIO_DIR_IN        @ We want this GPIO pin to be setup as an input pin
         bl      asm_gpio_set_dir        @ Call the subroutine to set the GPIO pin as an input
         movs    r0, r4                  @ Set the value of the GPIO pin for the gpio_set_irq_enabled function
-        bl      gpio_set_irq_enabled    @ Enable interrupts at the falling edge for the button
+        bl      asm_gpio_set_irq        @ Enable interrupts at the falling edge for the button
         pop     {pc}                    @ Pop lr into pc to return to previous subroutine
 
 
 set_alarm:
-	@ Set's the next alarm on alarm 0
-
 	@ Enable timer interupts
         ldr     r2, =TIMER_BASE                 @ load the location pointed to by TIMER_BASE into r2
         movs    r1, #1                          @ Move 1 into r1 to set timer_inte high
@@ -114,13 +114,16 @@ LED_on:
         b       led_set_state                   @ Set the state of 
 LED_off:	
         movs    r1, #LED_VAL_OFF                @ set lstate to 1
-        ldr     r2, =lstate                     @ load the address of next_state
+        ldr     r2, =lstate                     @ load the address of state
         str     r1, [r2]                        @ store state = 1
 led_set_state:	
         movs    r0, #GPIO_LED_PIN               @ Set the LED GPIO pin number to r0 for use by asm_gpio_put
         bl      asm_gpio_put                    @ Update the the value of the LED GPIO pin (based on value in r1)
 	pop     {pc}                            @ Return from the interrupt
 
+
+
+	
 @ Set up the alrm_isr in the RAM vector table and enables the correct interrupt
 install_alrm_isr:
 	@ Set alarm_isr handler to the correct address
@@ -141,6 +144,67 @@ install_alrm_isr:
 	bx      lr                                      @return to main
 
 
+//
+// Sets up the gpio_isr in the RAM vector table and enables the correct interrupt
+//
+install_gpio_isr:
+        @ Set alarm_isr handler to the correct address
+        ldr     r2, =(PPB_BASE + M0PLUS_VTOR_OFFSET)    @ Store address of vector table in r2
+        ldr     r1, [r2]                                @ Load address pointed to by the vecor table into r1
+        movs    r2, #GPIO_ISR_OFFSET                    @ Store the gpio isr offset in r2
+        add     r2, r1                                  @ Add the vector table address and the gpio offset
+        ldr     r0, =gpio_isr                           @ Load address of gpio_isr handler into r0
+        str     r0, [r2]                                @ Store the address of gpio_isr handler to correct offset in vector table
+
+        @ Disable then enable the GPIO IRQ 
+        ldr    r0, =0x2000                              @ Move 0x2000 into r1 so that we can set values high
+        ldr     r1, =(PPB_BASE+M0PLUS_NVIC_ICPR_OFFSET) @ Load address of the nvic_ipcr to r1
+        str     r0, [r1]                                @ Store 0x2000 in nvic_icpr to disable the gpio irq
+        ldr     r1, =(PPB_BASE+M0PLUS_NVIC_ISER_OFFSET) @ load address of the nvic_iser to r1
+        str     r0, [r1]                                @ Store 0x2000 in the nvic_iser to enable the gpio irq
+
+
+//
+// Service the pending interrupt from the GPIO
+//
+gpio_isr:
+        @ Read the interrupt status and detect which button was pressed
+        push    {lr}                                                    @ Push lr to the stack
+        ldr     r2, =(IO_BANK0_BASE + IO_BANK0_PROC0_INTS2_OFFSET)      @ Load address of interupt status event register
+        ldr     r1, [r2]                                                @ Load the interupt status into r1
+        ldr     r0, =GPIO_BTN_DN_MSK                                    @ Load mask for the down button into r0
+        cmp     r1, r0                                                  @ Check if r1 and compare are the same
+        beq     btn_dn                                                  @ If down button was pressed branch ...
+        ldr     r0, =GPIO_BTN_UP_MSK                                    @ Load mask for the down button into r0
+        cmp     r1, r0                                                  @ Check if r1 and compare are the same
+        beq     btn_up                                                  @ If down button was pressed branch ...
+        ldr     r0, =GPIO_BTN_EN_MSK                                    @ Load mask for the down button into r0
+        cmp     r1, r0                                                  @ Check if r1 and compare are the same
+        beq     btn_en                                                  @ If down button was pressed branch ..
+        b       disable_irq                                             @ else disable irq
+btn_dn: 
+        ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
+        ldr     r1, [r2]                        @ load value of the delay into r1
+        movs    r0, r1, lsl #4                  @ shift bits to the right to devide by 2
+        ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
+        str     r0, [r2]                        @ store new delay
+        b       disable_irq
+btn_up: 
+        ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
+        ldr     r1, [r2]                        @ load value of the delay into r1
+        movs    r0, r1, lsl #1                  @ shift bits to the right to devide by 2
+        ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
+        str     r0, [r2]                        @ store new delay
+        b       disable_irq
+btn_en:
+
+disable_irq:
+        ldr     r2, =(IO_BANK0_BASE+IO_BANK0_INTR2_OFFSET)      @ Load the locaition pointed to by TIMER_BASE into r0
+        movs    r1, #1                                          @ Move 1 into r1 so that NVIC_ICPR can be set high
+        str     r1, [r2]                                        @ Set NVIC_ICPR high to disable the gpio irq
+       
+
+        pop     {pc}
 
 
 
@@ -148,4 +212,5 @@ install_alrm_isr:
 .data
 lstate:		.word	0
 ltimer:         .word   DFLT_ALARM_TIME
+enstate:        .word   1       @ if =1 then allow flashing, otherwise dont
 
