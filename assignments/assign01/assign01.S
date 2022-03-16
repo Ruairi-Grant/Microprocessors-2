@@ -35,19 +35,18 @@
 main_asm:
         bl      init_led                @ Initialise the GPIO LED pin
         bl      init_all_btns           @ Initialize each GPIO Button
-	bl      install_alrm_isr        @ intall and setup the alarm isr
-        bl      install_gpio_isr        @ install and setup the gpio isr
+	bl      install_alrm_isr        @ Intall and setup the alarm isr
+        bl      install_gpio_isr        @ Install and setup the gpio isr
 main_loop:
         bl      set_alarm               @ Set a new alarm
-        movs    r0, #GPIO_BTN_DN
-        bl      asm_gpio_get
-        wfi                             @ Wait untill an interupt fires
-        b       main_loop               @ loop back to the start   
+        wfi                             @ Wait until an interupt fires
+        b       main_loop               @ Loop back to the start of main_loop
+
 @ Initialise the PI Pico built-in LED
 init_led:
         push    {lr}                    @ Store the link register to the stack as we will call nested subroutines
-        movs    r0, #GPIO_LED_PIN       @ This value is the GPIO LED pin on the PI PICO board
-        bl      asm_gpio_init           @ Call the subroutine to initialise the GPIO pin specified by r0
+        movs    r0, #GPIO_LED_PIN       @ Store the value of the GPIO LED pin on the PI PICO board
+        bl      asm_gpio_init           @ Call the subroutine to initialise the GPIO LED pin
         movs    r0, #GPIO_LED_PIN       @ This value is the GPIO LED pin on the PI PICO board
         movs    r1, #GPIO_DIR_OUT       @ We want this GPIO pin to be setup as an output pin
         bl      asm_gpio_set_dir        @ Call the subroutine to set the GPIO pin specified by r0 to state specified by r1
@@ -178,36 +177,56 @@ install_gpio_isr:
 //
 .thumb_func
 gpio_isr:
-        @ Read the interrupt status and detect which button was pressed
+        @ Read the interrupt status and disable irq
         push    {lr}                                                    @ Push lr to the stack
         ldr     r2, =(IO_BANK0_BASE + IO_BANK0_PROC0_INTS2_OFFSET)      @ Load address of interupt status event register
         ldr     r1, [r2]                                                @ Load the interupt status into r1
+        ldr     r2, =(IO_BANK0_BASE+IO_BANK0_INTR2_OFFSET)              @ Load the locaition into r0
+        str     r1, [r2]                                                @ Set INR2 high at the mask location to disable the gpio irq
+
+        @ Detect if enable button was pressed
+        ldr     r0, =GPIO_BTN_EN_MSK                                    @ Load mask for the enable button into r0
+        cmp     r1, r0                                                  @ Check if r1 and compare are the same
+        beq     btn_en                                                  @ If enable button was pressed branch
+
+        @ Check if enstate is low
+        ldr     r2, =enstate                                            @ Load address of the enable state into r2
+        ldr     r4, [r2]                                                @ load value of the state into r4
+        movs    r3, #0                                                  @ Case that state = 0
+        cmp     r4, r3                                                  @ compare the state with 0
+        beq     ltimer_rst                                              @ Reset flash interval to default
+
+        @ Check the remaining buttons
         ldr     r0, =GPIO_BTN_DN_MSK                                    @ Load mask for the down button into r0
         cmp     r1, r0                                                  @ Check if r1 and compare are the same
-        beq     btn_dn                                                  @ If down button was pressed branch ...
-        ldr     r0, =GPIO_BTN_UP_MSK                                    @ Load mask for the down button into r0
+        beq     btn_dn                                                  @ If down button was pressed branch 
+
+        ldr     r0, =GPIO_BTN_UP_MSK                                    @ Load mask for the up button into r0
         cmp     r1, r0                                                  @ Check if r1 and compare are the same
-        beq     btn_up                                                  @ If down button was pressed branch ...
-        ldr     r0, =GPIO_BTN_EN_MSK                                    @ Load mask for the down button into r0
-        cmp     r1, r0                                                  @ Check if r1 and compare are the same
-        beq     btn_en                                                  @ If down button was pressed branch ..
-        b       disable_irq                                             @ else disable irq
+        beq     btn_up                                                  @ If up button was pressed branch
+        
+        b       gpio_isr_rtrn                                           @ else disable irq
+
+ltimer_rst:
+        ldr     r1, =DFLT_ALARM_TIME            @ Load the delay address into r1
+        ldr     r2, =ltimer                     @ load the address of lstate
+        str     r1, [r2]                        @ store lstate = 1
+        b       gpio_isr_rtrn                   @ Set the state on 
+
 btn_dn: 
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         ldr     r1, [r2]                        @ load value of the delay into r1
-        movs    r0, r1, lsr #1                  @ shift bits to the right to devide by 2
+        movs    r4, r1, lsr #1                  @ shift bits to the right to devide by 2
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
-        str     r0, [r2]                        @ store new delay
-        ldr     r1, =0x40000                    @ Move 0x40000 into r1 so that we can disable bit-18 of intr2 
-        b       disable_irq                     @ disable the pending irq   
+        str     r4, [r2]                        @ store new delay
+        b       gpio_isr_rtrn                   @ disable the pending irq   
 btn_up: 
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         ldr     r1, [r2]                        @ load value of the delay into r1
         movs    r0, r1, lsl #1                  @ shift bits to the right to devide by 2
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         str     r0, [r2]                        @ store new delay
-        ldr     r1, =0x4000000                  @ Move 0x4000000 into r1 so that we can disable bit-26 of intr2
-        b       disable_irq                     @ disable the pending irq
+        b       gpio_isr_rtrn                   @ disable the pending irq
 btn_en:
         ldr     r2, =enstate                    @ Load address of the enable state into r2
         ldr     r1, [r2]                        @ load value of the state into r1
@@ -219,18 +238,15 @@ en_on:
         ldr     r2, =enstate                    @ load the address of next_state
         str     r1, [r2]                        @ store state = 0
         ldr     r1, =0x400000                   @ Move 0x400000 into r1 so that we can disable bit-22 of intr2
-        b       disable_irq                     @ disable the pending irq
+        b       gpio_isr_rtrn                   @ disable the pending irq
 en_off:	
         movs    r1, #0                          @ set lstate to 0
         ldr     r2, =enstate                    @ load the address of state
         str     r1, [r2]                        @ store state = 1
         ldr     r1, =0x400000                   @ Move 0x400000 into r1 so that we can disable bit-22 of intr2
-disable_irq:
-        ldr     r2, =(IO_BANK0_BASE+IO_BANK0_INTR2_OFFSET)      @ Load the locaition pointed to by TIMER_BASE into r0
-        str     r1, [r2]                                        @ Set NVIC_ICPR high to disable the gpio irq
-       
 
-        pop     {pc}
+gpio_isr_rtrn:
+        pop     {pc}                            @ Return to main_loop
 
 
 
