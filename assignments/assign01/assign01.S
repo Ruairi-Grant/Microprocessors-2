@@ -42,7 +42,9 @@ main_loop:
         wfi                             @ Wait until an interupt fires
         b       main_loop               @ Loop back to the start of main_loop
 
-@ Initialise the PI Pico built-in LED
+//
+// Initialise the PI Pico built-in LED
+//
 init_led:
         push    {lr}                    @ Store the link register to the stack as we will call nested subroutines
         movs    r0, #GPIO_LED_PIN       @ Store the value of the GPIO LED pin on the PI PICO board
@@ -52,21 +54,25 @@ init_led:
         bl      asm_gpio_set_dir        @ Call the subroutine to set the GPIO pin specified by r0 to state specified by r1
         pop     {pc}                    @ Pop the link register from the stack to the program counter
 
-@ Initialise each button using the init_btn subroutine
+//
+// Initialise each button using the init_btn subroutine
+//
 init_all_btns:
         push    {lr}                    @ Store link reg to the stack so we can call nested subroutines
         movs    r4, #GPIO_BTN_DN        @ Set r4 as the Down Button Pin
-        bl      init_btn                @ Initialise the GPIO Button down pins as inputs and with falling edge interupts
+        bl      init_btn                @ Initialise the GPIO Down Button pin as input and with falling edge interupts
         movs    r4, #GPIO_BTN_EN        @ Set r4 as the Enter Button Pin
-        bl      init_btn                @ Initialise the GPIO Button Enter pins as inputs and with falling edge interupts
+        bl      init_btn                @ Initialise the GPIO Enter Button pin as input and with falling edge interupts
         movs    r4, #GPIO_BTN_UP        @ Set r4 as the Up Button Pin
-        bl      init_btn                @ Initialise the GPIO Button Up pins as inputs and with falling edge interupts
+        bl      init_btn                @ Initialise the GPIO Up Button pin as input and with falling edge interupts
         pop     {pc}                    @ Pop the lr from the stack to return to main_asm
 
-@ Subroutine to initialise a Button with falling edge sensitive interupt
+//
+// Initialise a Button with falling edge sensitive interupt
+//
 init_btn:
-        push    {lr}                    @ Store the link reg on the stack so we can call subrouitnes
-        movs    r0, r4                  @ This value is the GPIO pin on the PI Pico board that the down button is connected to 
+        push    {lr}                    @ Store the link reg on the stack so we can call subroutines
+        movs    r0, r4                  @ This value is the GPIO pin on the PI Pico board that the button is connected to 
         bl      asm_gpio_init           @ Call the subroutine to initialise the GPIO pin 
         movs    r0, r4                  @ This value is the GPIO pin on the PI Pico board that the button is connected to 
         movs    r1, #GPIO_DIR_IN        @ We want this GPIO pin to be setup as an input pin
@@ -75,7 +81,9 @@ init_btn:
         bl      asm_gpio_set_irq        @ Enable interrupts at the falling edge for the button
         pop     {pc}                    @ Pop lr into pc to return to previous subroutine
 
-@ Set the alarm with the required length
+//
+// Set the alarm with the required delay
+//
 set_alarm:
 	@ Enable timer interupts
         ldr     r2, =TIMER_BASE                 @ load the location pointed to by TIMER_BASE into r2
@@ -90,42 +98,47 @@ set_alarm:
 
         bx      lr                              @ return to main loop
 
-
+//
+// Service the pending interupt from Timer
+// Check if enstate is high and if so toggle state of the LED
+//
 .thumb_func	@ necessary for interrupt handlers
-@ Alarm interrupt handler.
 alarm_isr:
 	push	{lr}	                        @ calls other routines
 
         @ Print to the console that alarm event occured
         ldr     r0, =alarm_event                @ Load message to be displayed
         bl      printf                          @ Print message
+
 	@ Disable the pending interrupt from TIMER
         ldr     r2, =TIMER_BASE                 @ Load the locaition pointed to by TIMER_BASE into r0
         movs    r1, #1                          @ Move 1 into r1 so that NVIC_ICPR can be set high
         str     r1, [r2, #TIMER_INTR_OFFSET]    @ Set NVIC_ICPR high to disable the alarm irq
 
-        @ Check if enstate is high
+        @ Check if enstate is low
         ldr     r2, =enstate                    @ Load address of the enable state into r2
-        ldr     r1, [r2]                        @ load value of the state into r1
+        ldr     r1, [r2]                        @ Load value of the state into r1
         movs    r3, #0                          @ Case that state = 0
-        cmp     r1, r3                          @ compare the state with 0
-        beq     alarm_isr_rtrn                  @ Toggle the LEDs
+        cmp     r1, r3                          @ Compare the state with 0
+        beq     alarm_isr_rtrn                  @ if enstate == 0 don't toggle the LED
 
-	@ Toggle the state of the LED
+	@ Else toggle the state of the LED
         ldr     r2, =lstate                     @ Load address of the state of the LED into r2
         ldr     r1, [r2]                        @ load value of the state into r1
         movs    r3, #1                          @ Case that state = 1
         cmp     r1, r3                          @ compare the state with 1
-        beq     LED_off                         @ Turn the LED off
+        beq     LED_off                         @ if state == 1 turn the LED off
 LED_on:	
+        @ Set lstate and LED as on
         movs    r1, #LED_VAL_ON                 @ Load the on value into r1
         ldr     r2, =lstate                     @ load the address of lstate
         str     r1, [r2]                        @ store lstate = 1
-        b       led_set_state                   @ Set the state on 
-LED_off:	
+        b       led_set_state                   @ Set the LED as on 
+LED_off:
+        @ Set lstate and LED as off
         movs    r1, #LED_VAL_OFF                @ Load the off value into r1
         ldr     r2, =lstate                     @ load the address of lstate
-        str     r1, [r2]                        @ store lstate = 0
+        str     r1, [r2]                        @ store lstate = 0 and continue to set the LED as off
 led_set_state:	
         movs    r0, #GPIO_LED_PIN               @ Set the LED GPIO pin number to r0 for use by asm_gpio_put
         bl      asm_gpio_put                    @ Update the the value of the LED GPIO pin (based on value in r1)
@@ -134,8 +147,9 @@ alarm_isr_rtrn:
 
 
 
-	
-@ Set up the alrm_isr in the RAM vector table and enables the correct interrupt
+//	
+// Set up the alrm_isr in the RAM vector table and enables the correct interrupt
+//
 install_alrm_isr:
 	@ Set alarm_isr handler to the correct address
         ldr     r2, =(PPB_BASE + M0PLUS_VTOR_OFFSET)    @ Store address of vector table in r2
@@ -168,15 +182,16 @@ install_gpio_isr:
         str     r0, [r2]                                @ Store the address of gpio_isr handler to correct offset in vector table
 
         @ Disable then enable the GPIO IRQ 
-        ldr    r0, =0x2000                              @ Move 0x2000 into r1 so that we can set values high
+        ldr    r0, =0x2000                              @ Move 0x2000 into r1 so that we can set bit 18 high
         ldr     r1, =(PPB_BASE+M0PLUS_NVIC_ICPR_OFFSET) @ Load address of the nvic_ipcr to r1
-        str     r0, [r1]                                @ Store 0x2000 in nvic_icpr to disable the gpio irq
+        str     r0, [r1]                                @ Set bit 18 in nvic_icpr high to disable the gpio irq
         ldr     r1, =(PPB_BASE+M0PLUS_NVIC_ISER_OFFSET) @ load address of the nvic_iser to r1
-        str     r0, [r1]                                @ Store 0x2000 in the nvic_iser to enable the gpio irq
+        str     r0, [r1]                                @ Set bit 18 in the nvic_iser high to enable the gpio irq
 
 
 //
 // Service the pending interrupt from the GPIO
+// Detect whcih buttton was pressed then follow appropriate action for each
 //
 .thumb_func
 gpio_isr:
@@ -198,7 +213,7 @@ gpio_isr:
         ldr     r4, [r2]                                                @ load value of the state into r4
         movs    r3, #0                                                  @ Case that state = 0
         cmp     r4, r3                                                  @ compare the state with 0
-        beq     ltimer_rst                                              @ Reset flash interval to default
+        beq     ltimer_rst                                              @ if enstate is low, reset flash interval to default
 
         @ Check the remaining buttons
         ldr     r0, =GPIO_BTN_DN_MSK                                    @ Load mask for the down button into r0
@@ -210,56 +225,59 @@ gpio_isr:
         beq     btn_up                                                  @ If up button was pressed branch
         
         b       gpio_isr_rtrn                                           @ else disable irq
-
 ltimer_rst:
         @ Print to the console that button was pressed
         ldr     r0, =rst_btn_press              @ Load message to be displayed
         bl      printf                          @ Print message
-        ldr     r1, =DFLT_ALARM_TIME            @ Load the delay address into r1
+        @ Reset the alarm time to default
+        ldr     r1, =DFLT_ALARM_TIME            @ Load the default alarm delay into r1
         ldr     r2, =ltimer                     @ load the address of lstate
-        str     r1, [r2]                        @ store lstate = 1
-        b       gpio_isr_rtrn                   @ Set the state on 
+        str     r1, [r2]                        @ store the default alarm time in lstate
+        b       gpio_isr_rtrn                   @ Branch to end of subroutine 
 
 btn_dn: 
         @ Print to the console that button was pressed
         ldr     r0, =dn_btn_press               @ Load message to be displayed
         bl      printf                          @ Print message
+        @ Devide the alarm delay by 2
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         ldr     r1, [r2]                        @ load value of the delay into r1
         movs    r4, r1, lsr #1                  @ shift bits to the right to devide by 2
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         str     r4, [r2]                        @ store new delay
-        b       gpio_isr_rtrn                   @ disable the pending irq   
+        b       gpio_isr_rtrn                   @ Branch to end of subroutine   
 btn_up: 
         @ Print to the console that button was pressed
         ldr     r0, =up_btn_press               @ Load message to be displayed
         bl      printf                          @ Print message
+        @ Multiply the alarm time by 2
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         ldr     r1, [r2]                        @ load value of the delay into r1
-        movs    r0, r1, lsl #1                  @ shift bits to the right to devide by 2
+        movs    r0, r1, lsl #1                  @ shift bits to the right to multiply by 2
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         str     r0, [r2]                        @ store new delay
-        b       gpio_isr_rtrn                   @ disable the pending irq
+        b       gpio_isr_rtrn                   @ Branch to end of subroutine
 btn_en:
         @ Print to the console that button was pressed
         ldr     r0, =en_btn_press               @ Load message to be displayed
         bl      printf                          @ Print message
+        @ Find current value of enstate
         ldr     r2, =enstate                    @ Load address of the enable state into r2
         ldr     r1, [r2]                        @ load value of the state into r1
         movs    r3, #1                          @ Case that state = 1
         cmp     r1, r3                          @ compare the state with 1
-        beq     en_off                          @ Set enstate to off
+        beq     en_off                          @ if enstate is high, set enstate to off
 en_on:	
-        movs    r1, #1                          @ Set lstate to 1
-        ldr     r2, =enstate                    @ load the address of next_state
-        str     r1, [r2]                        @ store state = 0
-        ldr     r1, =0x400000                   @ Move 0x400000 into r1 so that we can disable bit-22 of intr2
-        b       gpio_isr_rtrn                   @ disable the pending irq
-en_off:	
-        movs    r1, #0                          @ set lstate to 0
-        ldr     r2, =enstate                    @ load the address of state
+        @ Set enstate to high
+        movs    r1, #1                          @ Set enstate to 1
+        ldr     r2, =enstate                    @ load the address of enstate
         str     r1, [r2]                        @ store state = 1
-        ldr     r1, =0x400000                   @ Move 0x400000 into r1 so that we can disable bit-22 of intr2
+        b       gpio_isr_rtrn                   @ Branch to end of subroutine
+en_off:	
+        @ Set enstate to low
+        movs    r1, #0                          @ set enstate to 0
+        ldr     r2, =enstate                    @ load the address of enstate
+        str     r1, [r2]                        @ store state = o
 
 gpio_isr_rtrn:
         pop     {pc}                            @ Return to main_loop
