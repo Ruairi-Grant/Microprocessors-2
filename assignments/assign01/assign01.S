@@ -96,6 +96,9 @@ set_alarm:
 alarm_isr:
 	push	{lr}	                        @ calls other routines
 
+        @ Print to the console that alarm event occured
+        ldr     r0, =alarm_event                @ Load message to be displayed
+        bl      printf                          @ Print message
 	@ Disable the pending interrupt from TIMER
         ldr     r2, =TIMER_BASE                 @ Load the locaition pointed to by TIMER_BASE into r0
         movs    r1, #1                          @ Move 1 into r1 so that NVIC_ICPR can be set high
@@ -108,7 +111,7 @@ alarm_isr:
         cmp     r1, r3                          @ compare the state with 0
         beq     alarm_isr_rtrn                  @ Toggle the LEDs
 
-	@ Toggle the state of the LED then set the alarm
+	@ Toggle the state of the LED
         ldr     r2, =lstate                     @ Load address of the state of the LED into r2
         ldr     r1, [r2]                        @ load value of the state into r1
         movs    r3, #1                          @ Case that state = 1
@@ -177,8 +180,9 @@ install_gpio_isr:
 //
 .thumb_func
 gpio_isr:
-        @ Read the interrupt status and disable irq
         push    {lr}                                                    @ Push lr to the stack
+        
+        @ Read the interrupt status and disable irq
         ldr     r2, =(IO_BANK0_BASE + IO_BANK0_PROC0_INTS2_OFFSET)      @ Load address of interupt status event register
         ldr     r1, [r2]                                                @ Load the interupt status into r1
         ldr     r2, =(IO_BANK0_BASE+IO_BANK0_INTR2_OFFSET)              @ Load the locaition into r0
@@ -208,12 +212,18 @@ gpio_isr:
         b       gpio_isr_rtrn                                           @ else disable irq
 
 ltimer_rst:
+        @ Print to the console that button was pressed
+        ldr     r0, =rst_btn_press              @ Load message to be displayed
+        bl      printf                          @ Print message
         ldr     r1, =DFLT_ALARM_TIME            @ Load the delay address into r1
         ldr     r2, =ltimer                     @ load the address of lstate
         str     r1, [r2]                        @ store lstate = 1
         b       gpio_isr_rtrn                   @ Set the state on 
 
 btn_dn: 
+        @ Print to the console that button was pressed
+        ldr     r0, =dn_btn_press               @ Load message to be displayed
+        bl      printf                          @ Print message
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         ldr     r1, [r2]                        @ load value of the delay into r1
         movs    r4, r1, lsr #1                  @ shift bits to the right to devide by 2
@@ -221,6 +231,9 @@ btn_dn:
         str     r4, [r2]                        @ store new delay
         b       gpio_isr_rtrn                   @ disable the pending irq   
 btn_up: 
+        @ Print to the console that button was pressed
+        ldr     r0, =up_btn_press               @ Load message to be displayed
+        bl      printf                          @ Print message
         ldr     r2, =ltimer                     @ Load address of the alarm delay into r2
         ldr     r1, [r2]                        @ load value of the delay into r1
         movs    r0, r1, lsl #1                  @ shift bits to the right to devide by 2
@@ -228,6 +241,9 @@ btn_up:
         str     r0, [r2]                        @ store new delay
         b       gpio_isr_rtrn                   @ disable the pending irq
 btn_en:
+        @ Print to the console that button was pressed
+        ldr     r0, =en_btn_press               @ Load message to be displayed
+        bl      printf                          @ Print message
         ldr     r2, =enstate                    @ Load address of the enable state into r2
         ldr     r1, [r2]                        @ load value of the state into r1
         movs    r3, #1                          @ Case that state = 1
@@ -248,11 +264,15 @@ en_off:
 gpio_isr_rtrn:
         pop     {pc}                            @ Return to main_loop
 
-
-
+.align 4
+up_btn_press:   .asciz  "Up Button Pressed\n"
+dn_btn_press:   .asciz  "Down Button Pressed\n"
+en_btn_press:   .asciz  "Enable Button Pressed\n"
+rst_btn_press:  .asciz  "Reset Button Pressed\n"
+alarm_event:    .asciz  "Alarm Event Occured\n"
 
 .data
 lstate:		.word	0
 ltimer:         .word   DFLT_ALARM_TIME
-enstate:        .word   1       @ if =1 then allow flashing, otherwise dont
+enstate:        .word   1               @ if =1 then allow flashing, otherwise dont
 
