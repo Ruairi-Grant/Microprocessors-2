@@ -1,9 +1,28 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "pico/float.h"
-#include "pico/double.h"
-#include "pico/stdlib.h" 
-#include "pico/multicore.h"   
+#include <math.h>
+#include "pico/stdlib.h"
+#include "pico/float.h"     // Required for using single-precision variables.
+#include "pico/double.h"    // Required for using double-precision variables.
+#include "pico/multicore.h" // Required for using multiple cores on the RP2040. 
+
+
+/**
+ * @brief This function acts as the main entry-point for core #1.
+ *        A function pointer is passed in via the FIFO with one
+ *        incoming int32_t used as a parameter. The function will
+ *        provide an int32_t return value by pushing it back on 
+ *        the FIFO, which also indicates that the result is ready.
+ */
+void core1_entry() {
+    while (1) {
+        // 
+        int32_t (*func)() = (int32_t(*)()) multicore_fifo_pop_blocking();
+        int32_t p = multicore_fifo_pop_blocking();
+        int32_t result = (*func)(p);
+        multicore_fifo_push_blocking(result);
+    }
+}
 
 /**
  * @brief calculates the wallis product to find pi using floating point numbers
@@ -41,25 +60,54 @@ double wallis_double_precision(int iters){
  */
 int main() {
 
+    const int    ITER_MAX   = 100000;
+
+    // variables to store the timestamps and values for pi
+    uint32_t start_time = 0;
+    uint32_t end_time = 0;
+    float pi_float_approx = 0;
+    double pi_double_approx = 0;
+
     // Initialise the IO as we will be using the UART
     stdio_init_all();
 
-    //declare constants for pi and number of iterations
-    const double pi = 3.14159265359;
-    const int iterations = 100000;
+    multicore_launch_core1(core1_entry);
 
-    //calculate the value for pi using floats and doubles
-    float single_num = wallis_single_precision(iterations);
-    double double_num = wallis_double_precision(iterations);
 
-    // Print the value for each approximation and their error from the pi constant to the console
-    printf("Single Precision approximation is:\n" );
-    printf("%f\n", single_num);
-    printf("Single precision approximation error is: %f\n", (single_num - pi)/pi);
-    printf("Double Precision approximation is:\n" );
-    printf("%f\n", double_num);
-    printf("Double precision approximation error is: %f\n", (double_num - pi)/pi);
+    // Code for sequential run goes here…
+    //    Take snapshot of timer and store
+    start_time = time_us_32();
+    //    Run the single-precision Wallis approximation
+    pi_float_approx = wallis_single_precision(ITER_MAX);
+    //    Run the double-precision Wallis approximation
+    pi_double_approx = wallis_double_precision(ITER_MAX);
+    //    Take snapshot of timer and store
+    end_time = time_us_32();
+    //    Display time taken for application to run in sequential mode
+    printf("Sequential run time: %u\n", (end_time-start_time));
+    printf("float pi approx: %f \n Double pi approx: %f \n", pi_float_approx, pi_double_approx);
+
+    // set the pi approximations to 0 so that the function calls dontt get optimized away
+    pi_float_approx = 0;
+    pi_double_approx = 0;
+
+    // Code for parallel run goes here…
+    //    Take snapshot of timer and store
+    start_time = time_us_32();
+    //    Run the single-precision Wallis approximation on one core
+    multicore_fifo_push_blocking((uintptr_t) &wallis_single_precision);
+    multicore_fifo_push_blocking(ITER_MAX);
+    //    Run the double-precision Wallis approximation on the other core
+    pi_double_approx = wallis_double_precision(ITER_MAX);
+    //  return the value from core 1.
+    pi_float_approx = multicore_fifo_pop_blocking();
+    //    Take snapshot of timer and store
+    end_time = time_us_32();
+    //    Display time taken for application to run in parallel mode
+    printf("Parallel run time: %u\n", (end_time-start_time));
+    printf("Float pi approx: %f \nDouble pi approx: %f \n", pi_float_approx, pi_double_approx);
 
     // Returning zero indicates everything went okay.
     return 0;
 }
+
