@@ -1,3 +1,6 @@
 [submodule "tools/picoprobe"]
 	path = tools/picoprobe
 	url = https://github.com/raspberrypi/picoprobe.git
+[submodule "micro-group-3"]
+	path = assignments/micro-group-3
+	url = https://gitlab.scss.tcd.ie/microprocessor-group-3/micro-group-3.git
