@@ -14,7 +14,7 @@ Skeleton template for assignment #01.
 
 ### assignments/assign02
 
-Skeleton template for assignment #02.
+This Assignement was to programme a morse code game using the GPIO Button on a pi pico. 
 
 ## examples
 
